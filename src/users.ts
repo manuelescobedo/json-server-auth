@@ -9,6 +9,8 @@ import {
 	SALT_LENGTH,
 } from './constants'
 import { bodyParsingHandler, errorHandler } from './shared-middlewares'
+import * as csrf from 'csurf';
+const cookieParser = require('cookie-parser');
 
 interface User {
 	id: string
@@ -101,7 +103,7 @@ const create: RequestHandler = (req, res, next) => {
 /**
  * Login
  */
-const login: RequestHandler = (req, res, next) => {
+const login: RequestHandler = (req: any, res, next) => {
 	const { email, password } = req.body as User
 	const { db } = req.app
 
@@ -135,7 +137,9 @@ const login: RequestHandler = (req, res, next) => {
 			})
 		})
 		.then((accessToken: string) => {
-			res.status(200).jsonp({ accessToken })
+
+			req.accessToken = accessToken;
+			next();
 		})
 		.catch((err) => {
 			if (err === 400) res.status(400).jsonp('Incorrect password')
@@ -165,12 +169,79 @@ const update: RequestHandler = (req, res, next) => {
 }
 
 /**
+ * logout
+ */
+const logout = (req, res) => {
+	const { email } = req.body;
+	const { db } = req.app;
+
+	if (db == null) {
+		throw Error('You must bind the router db to the app');
+	}
+
+	// prettier-ignore
+	const user = db.get('users').find({ email }).value();
+	if (!user) {
+		res.status(400).jsonp('Cannot find user');
+		return;
+	}
+
+	const cookie = req.headers.cookie.match(/token=(.+);/);
+	if (cookie !== null) {
+		res.cookie('token', '', {
+			expires: new Date(0)
+		});
+	}
+
+	res.status(203).jsonp({});
+};
+
+const useBearerToken = (req, res, next) => {
+	const { accessToken } = req;
+	const decodedToken: any = jwt.decode(accessToken);
+	const expiresAt = decodedToken.exp * 1000;
+
+	res.status(200).jsonp({
+		expiresAt,
+		accessToken
+	});
+
+}
+
+
+const useSecureCookie = (req, res, next) => {
+	const { accessToken } = req;
+
+	const decodedToken: any = jwt.decode(accessToken);
+	const expiresAt = decodedToken.exp * 1000
+
+	res.cookie('token', accessToken, {
+		expires: new Date(expiresAt),
+		secure: false,
+		httpOnly: true
+	});
+
+	//
+	res.cookie('XSRF-TOKEN', req.csrfToken(), {
+		httpOnly: false, secure: false
+	});
+
+	res.status(200).jsonp({
+		expiresAt,
+		status: 'Success'
+	});
+}
+
+/**
  * Users router
  */
 export default Router()
 	.use(bodyParsingHandler)
+	.use(cookieParser())
+	.use(csrf({ cookie: true }))
 	.post('/users|register|signup', validate({ required: true }), create)
-	.post('/login|signin', validate({ required: true }), login)
+	.post('/login|signin', validate({ required: true }), login, useSecureCookie)
+	.post('/logout|signout', logout)
 	.put('/users/:id', validate({ required: true }), update)
 	.patch('/users/:id', validate({ required: false }), update)
 	.use(errorHandler)
