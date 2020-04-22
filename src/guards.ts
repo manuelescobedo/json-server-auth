@@ -3,13 +3,41 @@ import * as jwt from 'jsonwebtoken'
 import * as jsonServer from 'json-server'
 import { stringify } from 'querystring'
 import { JWT_SECRET_KEY } from './constants'
-import { bodyParsingHandler, errorHandler, goNext } from './shared-middlewares'
+
+import { bodyParsingHandler, errorHandler, goNext, validateCsrfToken } from './shared-middlewares'
 
 /**
  * Logged Guard.
  * Check JWT.
  */
-const loggedOnly: RequestHandler = (req, res, next) => {
+const verifyToken = (token, req, res, next) => {
+	try {
+		jwt.verify(token, JWT_SECRET_KEY);
+		// Add claims to request
+		req.claims = jwt.decode(token);
+		next();
+	}
+	catch (err) {
+		res.status(401).jsonp(err.message);
+	}
+}
+const readCookieToken = (req, res, next) => {
+	if (req.headers.cookie) {
+
+		const cookie = req.headers.cookie.match(/token=(.+);/);
+
+
+		if (cookie !== null) {
+			verifyToken(cookie[1], req, res, next);
+		}
+		else {
+			res.status(401).jsonp('Missing authorization cookie');
+
+		}
+		return;
+	}
+}
+const readBearerToken = (req, res, next) => {
 	const { authorization } = req.headers
 
 	if (!authorization) {
@@ -18,7 +46,6 @@ const loggedOnly: RequestHandler = (req, res, next) => {
 	}
 
 	const [scheme, token] = authorization.split(' ')
-
 	if (scheme !== 'Bearer') {
 		res.status(401).jsonp('Incorrect authorization scheme')
 		return
@@ -28,16 +55,9 @@ const loggedOnly: RequestHandler = (req, res, next) => {
 		res.status(401).jsonp('Missing token')
 		return
 	}
-
-	try {
-		jwt.verify(token, JWT_SECRET_KEY)
-		// Add claims to request
-		req.claims = jwt.decode(token) as any
-		next()
-	} catch (err) {
-		res.status(401).jsonp((err as jwt.JsonWebTokenError).message)
-	}
+	verifyToken(token, req, res, next);
 }
+const loggedOnly = (req, res, next) => readCookieToken(req, res, next);
 
 /**
  * Owner Guard.
@@ -52,7 +72,7 @@ const privateOnly: RequestHandler = (req, res, next) => {
 		}
 
 		// TODO: handle query params instead of removing them
-		const path = req.url.replace(`?${stringify(req.query)}`, '')
+		const path = req.url.replace(`?${stringify(req.query as any)}`, '')
 		const [, mod, resource, id] = path.split('/')
 
 		// Creation and replacement
@@ -163,6 +183,7 @@ const flattenUrl: RequestHandler = (req, res, next) => {
  */
 export default Router()
 	.use(bodyParsingHandler)
+	.use(validateCsrfToken)
 	.all('/666/*', flattenUrl)
 	.all('/664/*', branch({ read: goNext, write: loggedOnly }), flattenUrl)
 	.all('/660/*', loggedOnly, flattenUrl)

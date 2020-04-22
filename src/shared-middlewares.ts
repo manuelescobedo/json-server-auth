@@ -55,3 +55,14 @@ export function forbidMethod(method: RequestMethod): RequestHandler {
 		}
 	}
 }
+
+/**
+ * 
+ */
+export const validateCsrfToken = (err, req, res, next) => {
+	if (err.code !== 'EBADCSRFTOKEN') return next(err)
+
+	// handle CSRF token errors here
+	res.status(403).jsonp('cannot process form')
+};
+
