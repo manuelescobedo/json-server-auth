@@ -4,7 +4,7 @@ import * as jsonServer from 'json-server'
 import { stringify } from 'querystring'
 import { JWT_SECRET_KEY } from './constants'
 
-import { bodyParsingHandler, errorHandler, goNext, validateCsrfToken } from './shared-middlewares'
+import { extractCookieToken, bodyParsingHandler, errorHandler, goNext, csrfTokenErrorHandler } from './shared-middlewares'
 
 /**
  * Logged Guard.
@@ -21,14 +21,13 @@ const verifyToken = (token, req, res, next) => {
 		res.status(401).jsonp(err.message);
 	}
 }
+
 const readCookieToken = (req, res, next) => {
 	if (req.headers.cookie) {
-
-		const cookie = req.headers.cookie.match(/token=(.+);/);
-
+		const cookie = extractCookieToken(req.headers.cookie);
 
 		if (cookie !== null) {
-			verifyToken(cookie[1], req, res, next);
+			verifyToken(cookie, req, res, next);
 		}
 		else {
 			res.status(401).jsonp('Missing authorization cookie');
@@ -183,7 +182,6 @@ const flattenUrl: RequestHandler = (req, res, next) => {
  */
 export default Router()
 	.use(bodyParsingHandler)
-	.use(validateCsrfToken)
 	.all('/666/*', flattenUrl)
 	.all('/664/*', branch({ read: goNext, write: loggedOnly }), flattenUrl)
 	.all('/660/*', loggedOnly, flattenUrl)
@@ -193,6 +191,7 @@ export default Router()
 	.all('/444/*', readOnly, flattenUrl)
 	.all('/440/*', loggedOnly, readOnly, flattenUrl)
 	.all('/400/*', privateOnly, readOnly, flattenUrl)
+	.use(csrfTokenErrorHandler)
 	.use(errorHandler)
 
 /**

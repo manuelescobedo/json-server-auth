@@ -17,6 +17,8 @@
 	"engineStrict": true,
 	"scripts": {
 		"build": "rimraf dist && tsc -p tsconfig.build.json",
+		"predev": "npm run build",
+		"dev": "node dist/bin db.json -r routes.json",
 		"prepublishOnly": "yarn run build",
 		"test": "jest",
 		"test:watch": "jest --watch --verbose false"
@@ -25,6 +27,7 @@
 		"bcryptjs": "^2.4.3",
 		"body-parser": "^1.19.0",
 		"cookie-parser": "^1.4.5",
+		"cors": "^2.8.5",
 		"csurf": "^1.11.0",
 		"express": "^4.17.1",
 		"json-server": "^0.15.0",

@@ -1,6 +1,7 @@
 import * as bodyParser from 'body-parser'
 import { ErrorRequestHandler, RequestHandler } from 'express'
-
+import * as csrf from 'csurf';
+import * as cors from 'cors';
 /**
  * Use same body-parser options as json-server
  */
@@ -59,10 +60,33 @@ export function forbidMethod(method: RequestMethod): RequestHandler {
 /**
  * 
  */
-export const validateCsrfToken = (err, req, res, next) => {
+export const csrfTokenErrorHandler = (err, req, res, next) => {
 	if (err.code !== 'EBADCSRFTOKEN') return next(err)
 
 	// handle CSRF token errors here
 	res.status(403).jsonp('cannot process form')
 };
 
+export function extractCookieToken(cookie, token = 'token') {
+	const initialIndex = cookie.indexOf(`${token}=`);
+	let ret = cookie.substr(initialIndex + `${token}=`.length);
+	return ret.substr(0, ret.indexOf(';'));
+}
+export const validateCors = (whiteList = ['http://localhost:4200', 'http://localhost:3000']) => cors({
+	origin: (url, callback) => {
+		if (whiteList.includes(url)) {
+			callback(null, true);
+		} else {
+			callback(new Error('Not allowed by CORS'));
+		}
+	}
+})
+export const attachCsrfToken = (tokenName = 'XSRF-TOKEN') => (req: any, res, next) => {
+	// Pass the Csrf Token
+	res.cookie(tokenName, req.csrfToken(), {
+		httpOnly: false,
+		path: '/'
+	});
+	next()
+};
+export const validateCsrfToken = csrf({ cookie: true });

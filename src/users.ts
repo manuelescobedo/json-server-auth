@@ -8,8 +8,8 @@ import {
 	MIN_PASSWORD_LENGTH,
 	SALT_LENGTH,
 } from './constants'
-import { bodyParsingHandler, errorHandler } from './shared-middlewares'
-import * as csrf from 'csurf';
+import { bodyParsingHandler, errorHandler, validateCsrfToken, extractCookieToken, attachCsrfToken, validateCors } from './shared-middlewares'
+
 const cookieParser = require('cookie-parser');
 
 interface User {
@@ -186,7 +186,7 @@ const logout = (req, res) => {
 		return;
 	}
 
-	const cookie = req.headers.cookie.match(/token=(.+);/);
+	const cookie = extractCookieToken(req.headers.cookie);
 	if (cookie !== null) {
 		res.cookie('token', '', {
 			expires: new Date(0)
@@ -221,11 +221,6 @@ const useSecureCookie = (req, res, next) => {
 		httpOnly: true
 	});
 
-	//
-	res.cookie('XSRF-TOKEN', req.csrfToken(), {
-		httpOnly: false, secure: false
-	});
-
 	res.status(200).jsonp({
 		expiresAt,
 		status: 'Success'
@@ -237,8 +232,11 @@ const useSecureCookie = (req, res, next) => {
  */
 export default Router()
 	.use(bodyParsingHandler)
+	.use(validateCors())
 	.use(cookieParser())
-	.use(csrf({ cookie: true }))
+	.use(validateCsrfToken)
+	.use(attachCsrfToken())
+
 	.post('/users|register|signup', validate({ required: true }), create)
 	.post('/login|signin', validate({ required: true }), login, useSecureCookie)
 	.post('/logout|signout', logout)
